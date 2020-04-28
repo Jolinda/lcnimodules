@@ -2,16 +2,24 @@ import subprocess
 import os
 import glob
 
-##TODO
-## move getoutputfiles outside class, add argument for directory, improve globbing
+def OnTalapas():
+	groups = subprocess.run(['groups'], stdout = subprocess.PIPE, universal_newlines = True).stdout.strip().split()
+	return 'talapas' in groups
 
 def DefaultPirg():
 	groups = subprocess.run(['groups'], stdout = subprocess.PIPE, universal_newlines = True).stdout.strip().split()
 	pirgs = [x for x in groups if x != 'talapas']
-	return pirgs[0]
+	if 'talapas' in groups and pirgs:
+		return pirgs[0]
+	else:
+		return None
+
 
 def ValidPirg(pirg):
-	return pirg in os.listdir('/projects')
+	if OnTalapas():
+		return pirg in os.listdir('/projects')
+	else:
+		return False
 
 def SubmitSlurmFile(filename):
 	if not os.path.exists(filename):
@@ -29,21 +37,43 @@ def SubmitSlurmFile(filename):
 			
 	return jobnumber
 
+import time
+def WaitUntilComplete(jobnumber):
+	time.sleep(10)
+	while True:
+		if not AnyJobs(jobnumber, 'PENDING') and not AnyJobs(jobnumber, 'RUNNING'):
+			if AllJobs(jobnumber,'COMPLETED'):
+				print('Job complete')
+				return
+			else:
+				print(JobStatus(jobnumber))
+				assert False
+
+		if AnyJobs(jobnumber, 'PENDING'):
+			queue = subprocess.run('squeue', stdout=subprocess.PIPE, 
+							 stderr=subprocess.STDOUT, universal_newlines=True).stdout
+			for line in queue.split('\n'):
+				if jobnumber in line and 'ReqNodeNotAvail' in line:
+					print(line)
+					assert False
+
+		time.sleep(10)
+
 ## submit command to slurm using "wrap"
-def WrapSlurmCommand(command, pirg = None, index = None, partition = 'short', 
+def WrapSlurmCommand(command, account = None, index = None, partition = 'short', 
 					 output_directory = None, dependency = None, email = None, mem = None, 
 					 threads = None, clock_limit = None, deptype = 'ok'):
 
-	if not pirg:
-		pirg = DefaultPirg()
-		
-	if not ValidPirg(pirg):
-		print('Unknown pirg: {}'.format(pirg))
-		return None
+	if OnTalapas():
+		if not account:
+			account = DefaultPirg()
+			
+		if not ValidPirg(account):
+			raise ValueError('Unknown pirg: {}'.format(account)) 
 	
 	slurm = 'sbatch --partition={} '.format(partition)
 
-	slurm += '--account={} '.format(pirg)
+	slurm += '--account={} '.format(account)
 	
 	if index:
 		slurm += '--comment=idx:{} '.format(index)
@@ -86,19 +116,19 @@ def WrapSlurmCommand(command, pirg = None, index = None, partition = 'short',
 		return None
 
 
-def WriteSlurmFile(jobname, command, pirg = None, index = None, partition = 'short', email = None, filename = None,
+def WriteSlurmFile(jobname, command, filename = None, account = None, index = None, partition = 'short', 
 				   mem = None, data_list = None, variable = 'x', output_directory = None, dependency = None,
-				   threads = None, clock_limit = None, array_limit = None, deptype = 'ok', printfile = True):
+				   threads = None, clock_limit = None, array_limit = None, deptype = 'ok', email = None):
 	
 	if not filename:
 		filename = jobname + '.srun'
 
-
-	if not pirg:
-		pirg = DefaultPirg()
-	
-	if not ValidPirg(pirg):
-		raise ValueError('Unknown pirg: {}'.format(pirg)) 
+	if OnTalapas():
+		if not account:
+			account = DefaultPirg()
+			
+		if not ValidPirg(account):
+			print ('Warning: unknown pirg: {}'.format(account)) 
 	
 	with open (filename, 'w') as f:
 		f.write('#!/bin/bash\n')
@@ -129,7 +159,7 @@ def WriteSlurmFile(jobname, command, pirg = None, index = None, partition = 'sho
 
 		f.write('#SBATCH --comment=idx:{}\n'.format(index))
 
-		f.write('#SBATCH --account={}\n'.format(pirg))
+		f.write('#SBATCH --account={}\n'.format(account))
 
 		if output_directory:
 			if not os.path.exists(output_directory):
@@ -152,18 +182,13 @@ def WriteSlurmFile(jobname, command, pirg = None, index = None, partition = 'sho
 
 		f.write(command + '\n')
 
-	if printfile:
-		with open (filename) as f:
-			print(f.name)
-			print(f.read())
-	
 	return filename
 		
 
 # notify by email when an existing job finishes
 # this is for when you forget to add notification in the first place
-def Notify(jobnumber, email, pirg = None):
-	print(WrapSlurmCommand(command = 'echo done', pirg = pirg, email=email, dependency=jobnumber, deptype = 'any'))
+def Notify(jobnumber, email, account = None):
+	return (WrapSlurmCommand(command = 'echo done', account = account, email=email, dependency=jobnumber, deptype = 'any'))
 	
 def JobStatus(jobnumber):
 	status = []
@@ -200,17 +225,17 @@ def AllJobs(jobnumber, status):
 
 
 class slurmjob:
-	def __init__(self, jobname = None, pirg = None, index = None, command = None, partition = 'short',
+	def __init__(self, jobname = None, account = None, index = None, command = None, partition = 'short',
 				email = None,  output_directory = None, dependency = None, deptype = 'ok',
-				jobnumber = None, clock_limit = None, data_list = None, array_limit = None, variable = 'x',
-				threads = None, mem = None, srun_directory = None):
+				clock_limit = None, data_list = None, array_limit = None, variable = 'x',
+				threads = None, mem = None, srun_directory = None, filename = None):
 		
 		self.jobname = jobname
 		self.command = command
-		if not pirg:
-			self.pirg = DefaultPirg()
+		if OnTalapas() and not account:
+			self.account = DefaultPirg()
 		else:
-			self.pirg = pirg
+			self.account = account
 
 		self.index = index
 		self.partition = partition
@@ -219,89 +244,44 @@ class slurmjob:
 		self.data_list = data_list
 		self.variable = variable
 		self.output_directory = output_directory
-		self.srun_directory = srun_directory
 		self.dependency = dependency
 		self.threads = threads
 		self.clock_limit = clock_limit
 		self.array_limit = array_limit
 		self.deptype = deptype
-		self.jobnumber = None
-		# presumably if a jobnumber is supplied, this is an existing job and we can fill out some other info
-		if jobnumber:
-			self.jobnumber = jobnumber
-			info = self.JobInfo(['JobName', 'Partition', 'Account'], noheader = True).split()
-			if len(info) < 3:
-				raise ValueError('Job number {} not found'.format(self.jobnumber))
-			[self.jobname, self.partition, self.pirg] = info[:3]
+		self.__jobnumber = None
+		self.filename = None
 		
-	def WriteSlurmFile(self, jobname = None, command = None, printfile = True):	
+	def WriteSlurmFile(self, jobname = None, command = None, filename = None):	
 		if jobname:
 			self.jobname = jobname		
 		if not self.jobname:
 			raise ValueError('jobname not set')			
-		self.filename = '{}.srun'.format(self.jobname)
 		
 		if command:
 			self.command = command
 		if not self.command:
 			raise ValueError('command not set')
 		
-		if self.srun_directory:
-			if not os.path.exists(self.srun_directory):
-				os.mkdir(self.srun_directory)
-			filename = os.path.join(self.srun_directory, self.filename)
+		if filename:
+			self.filename = filename
 		else:
-			filename = self.filename
+			self.filename = '{}.srun'.format(self.jobname)
+
+
 		
-		slurmfile = WriteSlurmFile(jobname = self.jobname, command = self.command, pirg = self.pirg, 
-			index = self.index, partition = self.partition, email = self.email, filename = filename,
-				   mem = self.mem, data_list = self.data_list, variable = self.variable, 
-				   output_directory = self.output_directory, dependency = self.dependency,
-				   threads = self.threads, clock_limit = self.clock_limit, 
-				   array_limit = self.array_limit, deptype = self.deptype, printfile = printfile)
+		slurmfile = WriteSlurmFile(jobname = self.jobname, command = self.command, account = self.account, 
+			index = self.index, partition = self.partition, email = self.email, filename = self.filename,
+			mem = self.mem, data_list = self.data_list, variable = self.variable, 
+			output_directory = self.output_directory, dependency = self.dependency,
+			threads = self.threads, clock_limit = self.clock_limit, 
+			array_limit = self.array_limit, deptype = self.deptype)
 
 		return slurmfile
 
 	def SubmitSlurmFile(self):
-		if self.srun_directory:
-			filename = os.path.join(self.srun_directory, self.filename)
-		else:
-			filename = self.filename
-		
-		self.jobnumber = SubmitSlurmFile(filename)			
-		return self.jobnumber
-
-
-	def JobInfo(self, format_list = default_format, noheader = None):
-		return(JobInfo(jobnumber = self.jobnumber, format_list = format_list, noheader = noheader))
-	
-
-	def JobStatus(self):
-		return JobStatus(self.jobnumber)
-
-
-	import time
-	def WaitUntilComplete(self):
-		time.sleep(10)
-		while True:
-			if not AnyJobs(self.jobnumber, 'PENDING') and not AnyJobs(self.jobnumber, 'RUNNING'):
-				if AllJobs(self.jobnumber,'COMPLETED'):
-					print('Job complete')
-					return
-				else:
-					print(JobStatus(self.jobnumber))
-					assert False
-
-			if AnyJobs(self.jobnumber, 'PENDING'):
-				queue = subprocess.run('squeue', stdout=subprocess.PIPE, 
-								 stderr=subprocess.STDOUT, universal_newlines=True).stdout
-				for line in queue.split('\n'):
-					if self.jobnumber in line and 'ReqNodeNotAvail' in line:
-						print(line)
-						assert False
-
-			time.sleep(10)
-	
+		self.__jobnumber = SubmitSlurmFile(self.filename)			
+		return self.__jobnumber
 
 
 	## submit command to slurm using "wrap"
@@ -309,23 +289,19 @@ class slurmjob:
 		if command:
 			self.command = command
 
-		self.jobnumber = WrapSlurmCommand(command = self.command, pirg = self.pirg, 
+		self.__jobnumber = WrapSlurmCommand(command = self.command, account = self.account, 
 			index = self.index, partition = self.partition, output_directory = self.output_directory, 
 			dependency = self.dependency, email = self.email, mem = self.mem, 
 			threads = self.threads, clock_limit = self.clock_limit, deptype = self.deptype)
 
-		return self.jobnumber
+		return self.__jobnumber
 	
-
-
-	def ShowStatus(self):
-		ShowStatus(self.jobnumber)
 
 	def GetOutputFiles(self, extension = 'all'):
 		if self.output_directory :
-			filename = os.path.join(self.output_directory, '{}-{}'.format(self.jobname, self.jobnumber))
+			filename = os.path.join(self.output_directory, '{}-{}'.format(self.jobname, self.__jobnumber))
 		else:
-			filename = 'slurm-{}'.format(self.jobnumber)
+			filename = 'slurm-{}'.format(self.__jobnumber)
 		if extension == 'all':
 			return sorted(glob.glob(filename + '*.*'))
 		else:
