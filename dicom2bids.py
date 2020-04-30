@@ -234,7 +234,9 @@ def GetAuthors(dicompath):
 
 # returns the jq command string to add or modify a json file 
 def FixJson(filename, key, value):
-	return 'jq \'.{1}="{2}"\' {0} > {0}\n'.format(filename, key, value)
+	command =  'jq \'.{1}="{2}"\' {0} > \\tmp\{3}\n'.format(filename, key, value, os.path.basename(filename))
+	command += 'mv \\tmp\{} {}\n'.format(os.path.basename(filename), filename)
+	return(command)
 
 # usual things wrong in lcni dicoms pre 4/30/2020
 lcni_corrections = {'InstitutionName':'University of Oregon', 'InstitutionalDepartmentName':'LCNI', 'InstitutionAddress':'Franklin_Blvd_1440_Eugene_Oregon_US_97403'}
