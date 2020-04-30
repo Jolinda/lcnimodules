@@ -116,8 +116,7 @@ def AppendParticipant(subjectdir, bidsdir):
 	if not os.path.exists(bidsdir):
 		os.makedirs(bidsdir)
 
-	#name = re.search(dicom_pattern, os.path.basename(subjectdir)).group(1)
-	name = re.search(dicom_pattern, subjectdir).group(1)
+	name = re.search(dicom_pattern, os.path.basename(subjectdir.strip('/'))).group(1)
 	# check for name in .tsv first
 	part_file = os.path.join(bidsdir, 'participants.tsv')
 	import csv
@@ -154,7 +153,9 @@ def AppendParticipant(subjectdir, bidsdir):
 	return
 
 
-def convert(subjectdir, bidsdir, bids_dict, submit = True, participant_file = True):
+
+def convert(subjectdir, bidsdir, bids_dict, submit = True, participant_file = True, 
+	json_mod = None, dcm2niix_flags = ''):
 	
 	if not os.path.exists(bidsdir) and submit:
 		os.makedirs(bidsdir)
@@ -165,10 +166,9 @@ def convert(subjectdir, bidsdir, bids_dict, submit = True, participant_file = Tr
 	if participant_file and submit:
 		AppendParticipant(subjectdir, bidsdir)
 
-#	name = re.search(dicom_pattern, os.path.basename(subjectdir)).group(1)
-	name = re.search(dicom_pattern, subjectdir).group(1)
+	name = re.search(dicom_pattern, os.path.basename(subjectdir.strip('/'))).group(1)
 
-	command = 'module load dcm2niix/1.0.20200331\n'
+	command = 'module load dcm2niix\n'
 	command += 'module load jq\n'
 
 	subj_dir = os.path.join(bidsdir, 'sub-{}'.format(name))
@@ -191,13 +191,18 @@ def convert(subjectdir, bidsdir, bids_dict, submit = True, participant_file = Tr
 			if not os.path.exists(output_dir):
 				os.makedirs(output_dir)
 
-			command += 'dcm2niix -ba n -l o -o {} -f {} {}\n'.format(output_dir,
-						format_string, os.path.join(subjectdir, series))
+			command += 'dcm2niix -ba n -l o -o {} -f {} {} {}\n'.format(output_dir,
+						format_string, dcm2niix_flags, os.path.join(subjectdir, series))
 
+			json_file = os.path.join(output_dir, format_string + '.json')
 			if entity.task:
-				task_json = os.path.join(output_dir, format_string + '.json')
-				command += 'jq \'.TaskName="{0}"\' {1} > {1}\n'.format(entity.task, task_json)
-			
+				#command += 'jq \'.TaskName="{0}"\' {1} > {1}\n'.format(entity.task, task_json)
+				command += FixJson(json_file, 'TaskName', entity.task)
+
+			if json_mod:
+				for key in json_mod:
+					command += FixJson(json_file, key, json_mod[key])
+
 	if submit:
 		import slurmpy
 		job = slurmpy.slurmjob(jobname = 'convert', command = command)
@@ -227,4 +232,9 @@ def GetAuthors(dicompath):
 
 	return list(authorlist)
 
+# returns the jq command string to add or modify a json file 
+def FixJson(filename, key, value):
+	return 'jq \'.{1}="{2}"\' {0} > {0}\n'.format(filename, key, value)
 
+# usual things wrong in lcni dicoms pre 4/30/2020
+lcni_corrections = {'InstitutionName':'University of Oregon', 'InstitutionalDepartmentName':'LCNI', 'InstitutionAddress':'Franklin_Blvd_1440_Eugene_Oregon_US_97403'}
