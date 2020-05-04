@@ -21,6 +21,11 @@ def ValidPirg(pirg):
 	else:
 		return False
 
+# talapas only script from Mike Coleman
+# /packages/racs/bin/slurm-throttle
+def SlurmThrottle():
+	subprocess.run(['/packages/racs/bin/slurm-throttle'])
+
 def SubmitSlurmFile(filename):
 	if not os.path.exists(filename):
 		print('{} not found'.format(filename))
@@ -116,7 +121,7 @@ def WrapSlurmCommand(command, account = None, index = None, partition = 'short',
 		return None
 
 
-def WriteSlurmFile(jobname, command, filename = None, account = None, index = None, partition = 'short', 
+def WriteSlurmFile(jobname, command, filename = None, interpreter = 'bash', account = None, index = None, partition = 'short', 
 				   mem = None, data_list = None, variable = 'x', output_directory = None, dependency = None,
 				   threads = None, clock_limit = None, array_limit = None, deptype = 'ok', email = None):
 	
@@ -131,7 +136,16 @@ def WriteSlurmFile(jobname, command, filename = None, account = None, index = No
 			print ('Warning: unknown pirg: {}'.format(account)) 
 	
 	with open (filename, 'w') as f:
-		f.write('#!/bin/bash\n')
+		if interpreter == 'python':
+			import sys
+			f.write('#!{}\n'.format(sys.executable))
+
+		elif interpreter == 'bash':
+			f.write('#!/bin/bash\n')
+			
+		else : # caller sent full path to interpreter
+			f.write('#!{}\n'.format(interpreter))
+			
 		f.write('#SBATCH --partition={}\n'.format(partition))
 
 		if (partition == 'gpu'):
@@ -249,10 +263,10 @@ class slurmjob:
 		self.clock_limit = clock_limit
 		self.array_limit = array_limit
 		self.deptype = deptype
-		self.__jobnumber = None
+		self.jobnumber = None
 		self.filename = None
 		
-	def WriteSlurmFile(self, jobname = None, command = None, filename = None):	
+	def WriteSlurmFile(self, jobname = None, command = None, filename = None, interpreter = 'bash'):	
 		if jobname:
 			self.jobname = jobname		
 		if not self.jobname:
@@ -274,14 +288,14 @@ class slurmjob:
 			index = self.index, partition = self.partition, email = self.email, filename = self.filename,
 			mem = self.mem, data_list = self.data_list, variable = self.variable, 
 			output_directory = self.output_directory, dependency = self.dependency,
-			threads = self.threads, clock_limit = self.clock_limit, 
+			threads = self.threads, clock_limit = self.clock_limit, interpreter = interpreter,
 			array_limit = self.array_limit, deptype = self.deptype)
 
 		return slurmfile
 
 	def SubmitSlurmFile(self):
-		self.__jobnumber = SubmitSlurmFile(self.filename)			
-		return self.__jobnumber
+		self.jobnumber = SubmitSlurmFile(self.filename)			
+		return self.jobnumber
 
 
 	## submit command to slurm using "wrap"
@@ -289,21 +303,41 @@ class slurmjob:
 		if command:
 			self.command = command
 
-		self.__jobnumber = WrapSlurmCommand(command = self.command, account = self.account, 
+		self.jobnumber = WrapSlurmCommand(command = self.command, account = self.account, 
 			index = self.index, partition = self.partition, output_directory = self.output_directory, 
 			dependency = self.dependency, email = self.email, mem = self.mem, 
 			threads = self.threads, clock_limit = self.clock_limit, deptype = self.deptype)
 
-		return self.__jobnumber
+		return self.jobnumber
 	
 
 	def GetOutputFiles(self, extension = 'all'):
 		if self.output_directory :
-			filename = os.path.join(self.output_directory, '{}-{}'.format(self.jobname, self.__jobnumber))
+			filename = os.path.join(self.output_directory, '{}-{}'.format(self.jobname, self.jobnumber))
 		else:
-			filename = 'slurm-{}'.format(self.__jobnumber)
+			filename = 'slurm-{}'.format(self.jobnumber)
 		if extension == 'all':
 			return sorted(glob.glob(filename + '*.*'))
 		else:
 			return sorted(glob.glob(filename + '*.' + extension))
+
+
+	def Notify(self, email = None):
+		if not email:
+			email = self.email
+		if not email:
+			raise ValueError('no email to notify!')
+		return Notify(jobnumber = self.jobnumber, email = email, account = self.account)
+	
+	def JobStatus(self):
+		return JobStatus(self.jobnumber)
+
+
+	def JobInfo(self, format_list = default_format, noheader = None):
+		return JobInfo(self.jobnumber, format_list, noheader)
+
+
+	def ShowStatus(self):
+		return ShowStatus(self.jobnumber)
+
 		
