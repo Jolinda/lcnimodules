@@ -6,23 +6,6 @@ def OnTalapas():
 	groups = subprocess.run(['groups'], stdout = subprocess.PIPE, universal_newlines = True).stdout.strip().split()
 	return 'talapas' in groups
 
-# this was not the right way. Right way is through a SLURM_ACCOUNT and 
-# SBATCH_ACCOUT environmental variables
-# If those are set, we don't need to include account in the slurm submission. So we don't need this at all
-#def DefaultPirg():
-#	groups = subprocess.run(['groups'], stdout = subprocess.PIPE, universal_newlines = True).stdout.strip().split()
-#	pirgs = [x for x in groups if x != 'talapas']
-#	if 'talapas' in groups and pirgs:
-#		return pirgs[0]
-#	else:
-#		return None
-
-# can let slurm handle this
-#def ValidPirg(pirg):
-#	if OnTalapas():
-#		return pirg in os.listdir('/projects')
-#	else:
-#		return False
 
 # talapas only script from Mike Coleman
 # /packages/racs/bin/slurm-throttle
@@ -68,21 +51,19 @@ def WaitUntilComplete(jobnumber):
 		time.sleep(10)
 
 ## submit command to slurm using "wrap"
-def WrapSlurmCommand(command, account = None, index = None, partition = 'short', 
-					 output_directory = None, dependency = None, email = None, mem = None, 
-					 threads = None, clock_limit = None, deptype = 'ok'):
+## moving some arguments to slurm_params
+def WrapSlurmCommand(command, jobname =None, index = None, 
+					 output_directory = None, dependency = None, email = None, 
+					 threads = None, deptype = 'ok', **slurm_params):
 
 
-	slurm = 'sbatch --partition={} '.format(partition)
+	slurm = 'sbatch '
 
-	if account:
-		slurm += '--account={} '.format(account)
+	if jobname:
+		slurm += '--job-name={} '.format(jobname)
 	
 	if index:
 		slurm += '--comment=idx:{} '.format(index)
-
-	if (partition == 'gpu'):
-		slurm += '--gres=gpu:1 '
 	
 	if email:
 		slurm += '--mail-user={} --mail-type=END '.format(email)
@@ -90,14 +71,11 @@ def WrapSlurmCommand(command, account = None, index = None, partition = 'short',
 	if dependency:
 		slurm += '--dependency=after{}:{} '.format(deptype, dependency)
 		
-	if clock_limit: ### Wall clock time limit in Days-HH:MM:SS
-		slurm += '--time={} '.format(clock_limit)
-		
-	if mem:
-		slurm += '--mem={} '.format(mem)
-
 	if threads:
 		slurm += '--cpus-per-task={} '.format(threads)
+
+	for arg in slurm_params:
+		slurm += '--{}={} '.format(arg, slurm_params[arg])
 		
 	if output_directory:
 			if not os.path.exists(output_directory):
@@ -119,9 +97,9 @@ def WrapSlurmCommand(command, account = None, index = None, partition = 'short',
 		return None
 
 
-def WriteSlurmFile(jobname, command, filename = None, interpreter = 'bash', account = None, index = None, partition = 'short', 
-				   mem = None, data_list = None, variable = 'x', output_directory = None, dependency = None,
-				   threads = None, clock_limit = None, array_limit = None, deptype = 'ok', email = None):
+def WriteSlurmFile(jobname, command, filename = None, interpreter = 'bash', index = None,  
+				   data_list = None, variable = 'x', output_directory = None, dependency = None,
+				   threads = None, array_limit = None, deptype = 'ok', email = None, **slurm_params):
 	
 	if not filename:
 		filename = jobname + '.srun'
@@ -136,22 +114,12 @@ def WriteSlurmFile(jobname, command, filename = None, interpreter = 'bash', acco
 			
 		else : # caller sent full path to interpreter
 			f.write('#!{}\n'.format(interpreter))
-			
-		f.write('#SBATCH --partition={}\n'.format(partition))
-
-		if (partition == 'gpu'):
-			 f.write('#SBATCH --gres=gpu:1\n')
 
 		f.write('#SBATCH --job-name={}\n'.format(jobname))
-		f.write('#SBATCH --nodes=1\n') 
-		f.write('#SBATCH --ntasks=1\n')
 
 		if email:
 			f.write('#SBATCH --mail-user={}\n'.format(email))
 			f.write('#SBATCH --mail-type=END\n')
-
-		if mem:
-			f.write('#SBATCH --mem={}\n'.format(mem))
 
 		if dependency:
 			 f.write('#SBATCH --dependency=after{}:{}\n'.format(deptype, dependency))
@@ -159,13 +127,11 @@ def WriteSlurmFile(jobname, command, filename = None, interpreter = 'bash', acco
 		if threads:
 			f.write('#SBATCH --cpus-per-task={}\n'.format(threads))
 
-		if clock_limit: ### Wall clock time limit in Days-HH:MM:SS
-			f.write('#SBATCH --time={}\n'.format(clock_limit))    
+		if index:
+			f.write('#SBATCH --comment=idx:{}\n'.format(index))
 
-		f.write('#SBATCH --comment=idx:{}\n'.format(index))
-
-		if account:
-			f.write('#SBATCH --account={}\n'.format(account))
+		for arg in slurm_params:
+			f.write('#SBATCH --{}={}\n'.format(arg, slurm_params[arg]))
 
 		if output_directory:
 			if not os.path.exists(output_directory):
@@ -231,31 +197,32 @@ def AllJobs(jobnumber, status):
 
 
 class slurmjob:
-	def __init__(self, jobname = None, account = None, index = None, command = None, partition = 'short',
+	def __init__(self, jobname = None, index = None, command = None, 
 				email = None,  output_directory = None, dependency = None, deptype = 'ok',
-				clock_limit = None, data_list = None, array_limit = None, variable = 'x',
-				threads = None, mem = None, srun_directory = None, filename = None):
+				data_list = None, array_limit = None, variable = 'x',
+				threads = None, srun_directory = None, filename = None, **slurm_params):
 		
 		self.jobname = jobname
 		self.command = command
-		self.account = account
-
 		self.index = index
-		self.partition = partition
 		self.email = email
-		self.mem = mem
 		self.data_list = data_list
 		self.variable = variable
 		self.output_directory = output_directory
 		self.dependency = dependency
 		self.threads = threads
-		self.clock_limit = clock_limit
 		self.array_limit = array_limit
 		self.deptype = deptype
 		self.jobnumber = None
 		self.filename = None
+		self.slurm_params = slurm_params
+
+	def AddSlurmParameters(self, **kwargs):
+		self.slurm_params.update(kwargs)
 		
-	def WriteSlurmFile(self, jobname = None, command = None, filename = None, interpreter = 'bash'):	
+	def WriteSlurmFile(self, jobname = None, command = None, filename = None, interpreter = 'bash', 
+		**kwargs):
+
 		if jobname:
 			self.jobname = jobname		
 		if not self.jobname:
@@ -271,14 +238,14 @@ class slurmjob:
 		else:
 			self.filename = '{}.srun'.format(self.jobname)
 
-
 		
-		slurmfile = WriteSlurmFile(jobname = self.jobname, command = self.command, account = self.account, 
-			index = self.index, partition = self.partition, email = self.email, filename = self.filename,
-			mem = self.mem, data_list = self.data_list, variable = self.variable, 
+		slurmfile = WriteSlurmFile(jobname = self.jobname, command = self.command, 
+			index = self.index, email = self.email, filename = self.filename,
+			data_list = self.data_list, variable = self.variable, 
 			output_directory = self.output_directory, dependency = self.dependency,
-			threads = self.threads, clock_limit = self.clock_limit, interpreter = interpreter,
-			array_limit = self.array_limit, deptype = self.deptype)
+			threads = self.threads, interpreter = interpreter,
+			array_limit = self.array_limit, deptype = self.deptype,
+			**{**self.slurm_params, **kwargs})
 
 		return slurmfile
 
@@ -288,14 +255,13 @@ class slurmjob:
 
 
 	## submit command to slurm using "wrap"
-	def WrapSlurmCommand(self, command=None):
+	def WrapSlurmCommand(self, command=None, **kwargs):
 		if command:
 			self.command = command
 
-		self.jobnumber = WrapSlurmCommand(command = self.command, account = self.account, 
-			index = self.index, partition = self.partition, output_directory = self.output_directory, 
-			dependency = self.dependency, email = self.email, mem = self.mem, 
-			threads = self.threads, clock_limit = self.clock_limit, deptype = self.deptype)
+		self.jobnumber = WrapSlurmCommand(command = self.command, index = self.index, output_directory = self.output_directory, 
+			dependency = self.dependency, email = self.email, threads = self.threads, deptype = self.deptype,
+			**{**self.slurm_params, **kwargs})
 
 		return self.jobnumber
 	
