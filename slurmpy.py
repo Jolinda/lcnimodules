@@ -6,20 +6,23 @@ def OnTalapas():
 	groups = subprocess.run(['groups'], stdout = subprocess.PIPE, universal_newlines = True).stdout.strip().split()
 	return 'talapas' in groups
 
-def DefaultPirg():
-	groups = subprocess.run(['groups'], stdout = subprocess.PIPE, universal_newlines = True).stdout.strip().split()
-	pirgs = [x for x in groups if x != 'talapas']
-	if 'talapas' in groups and pirgs:
-		return pirgs[0]
-	else:
-		return None
+# this was not the right way. Right way is through a SLURM_ACCOUNT and 
+# SBATCH_ACCOUT environmental variables
+# If those are set, we don't need to include account in the slurm submission. So we don't need this at all
+#def DefaultPirg():
+#	groups = subprocess.run(['groups'], stdout = subprocess.PIPE, universal_newlines = True).stdout.strip().split()
+#	pirgs = [x for x in groups if x != 'talapas']
+#	if 'talapas' in groups and pirgs:
+#		return pirgs[0]
+#	else:
+#		return None
 
-
-def ValidPirg(pirg):
-	if OnTalapas():
-		return pirg in os.listdir('/projects')
-	else:
-		return False
+# can let slurm handle this
+#def ValidPirg(pirg):
+#	if OnTalapas():
+#		return pirg in os.listdir('/projects')
+#	else:
+#		return False
 
 # talapas only script from Mike Coleman
 # /packages/racs/bin/slurm-throttle
@@ -69,16 +72,11 @@ def WrapSlurmCommand(command, account = None, index = None, partition = 'short',
 					 output_directory = None, dependency = None, email = None, mem = None, 
 					 threads = None, clock_limit = None, deptype = 'ok'):
 
-	if OnTalapas():
-		if not account:
-			account = DefaultPirg()
-			
-		if not ValidPirg(account):
-			raise ValueError('Unknown pirg: {}'.format(account)) 
-	
+
 	slurm = 'sbatch --partition={} '.format(partition)
 
-	slurm += '--account={} '.format(account)
+	if account:
+		slurm += '--account={} '.format(account)
 	
 	if index:
 		slurm += '--comment=idx:{} '.format(index)
@@ -128,13 +126,6 @@ def WriteSlurmFile(jobname, command, filename = None, interpreter = 'bash', acco
 	if not filename:
 		filename = jobname + '.srun'
 
-	if OnTalapas():
-		if not account:
-			account = DefaultPirg()
-			
-		if not ValidPirg(account):
-			print ('Warning: unknown pirg: {}'.format(account)) 
-	
 	with open (filename, 'w') as f:
 		if interpreter == 'python':
 			import sys
@@ -173,7 +164,8 @@ def WriteSlurmFile(jobname, command, filename = None, interpreter = 'bash', acco
 
 		f.write('#SBATCH --comment=idx:{}\n'.format(index))
 
-		f.write('#SBATCH --account={}\n'.format(account))
+		if account:
+			f.write('#SBATCH --account={}\n'.format(account))
 
 		if output_directory:
 			if not os.path.exists(output_directory):
@@ -246,10 +238,7 @@ class slurmjob:
 		
 		self.jobname = jobname
 		self.command = command
-		if OnTalapas() and not account:
-			self.account = DefaultPirg()
-		else:
-			self.account = account
+		self.account = account
 
 		self.index = index
 		self.partition = partition

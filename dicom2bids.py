@@ -150,7 +150,7 @@ def AppendParticipant(subjectdir, bidsdir):
 	return
 
 def Convert(dicomdir, bidsdir, bids_dict, slurm = True, participant_file = True, 
-	json_mod = None, dcm2niix_flags = '', throttle = False):
+	json_mod = None, dcm2niix_flags = '', throttle = False, account = None):
 
 	subjectdirs = [x[0] for x in os.walk(dicomdir) if subject_pattern.match(os.path.basename(x[0].strip('/')))]
 	
@@ -175,7 +175,7 @@ def Convert(dicomdir, bidsdir, bids_dict, slurm = True, participant_file = True,
 
 		if slurm:
 			import slurmpy
-			job = slurmpy.slurmjob(jobname = 'convert', command = command)
+			job = slurmpy.slurmjob(jobname = 'convert', command = command, account = account)
 			job.WriteSlurmFile(filename = '/tmp/convert.srun')
 			job.SubmitSlurmFile()
 			if throttle:
@@ -265,14 +265,14 @@ def FixJson(filename, key, value):
 lcni_corrections = {'InstitutionName':'University of Oregon', 'InstitutionalDepartmentName':'LCNI', 'InstitutionAddress':'Franklin_Blvd_1440_Eugene_Oregon_US_97403'}
 
 
-def SortDicoms(input_dir, output_dir, overwrite = False, preview = False, slurm = True):
+def SortDicoms(input_dir, output_dir, overwrite = False, preview = False, slurm = True, account = None):
 
 	if slurm:
 		command = 'import dicom2bids\n'
 		command += 'dicom2bids.SortDicoms("{}","{}", overwrite = {}, preview = {}, slurm = False)'.format(input_dir, output_dir, overwrite, preview)
 
 		import slurmpy
-		job = slurmpy.slurmjob(jobname = 'sort', command = command)
+		job = slurmpy.slurmjob(jobname = 'sort', command = command, account = account)
 		job.WriteSlurmFile(filename = 'sort.srun', interpreter = 'python')
 		return job.SubmitSlurmFile()
 
@@ -315,14 +315,4 @@ def SortDicoms(input_dir, output_dir, overwrite = False, preview = False, slurm 
 	if duplicates:
 		print('One or more files already existing and not moved')
 
-# will make a flag
-def SortDicomsSlurm(input_dir, output_dir, overwrite = False, preview = False):
-
-	command = 'import dicom2bids\n'
-	command += 'dicom2bids.SortDicoms("{}","{}", overwrite = {}, preview = {})'.format(input_dir, output_dir, overwrite, preview)
-
-	import slurmpy
-	job = slurmpy.slurmjob(jobname = 'sort', command = command)
-	job.WriteSlurmFile(filename = 'sort.srun', interpreter = 'python')
-	return job.SubmitSlurmFile()
 
