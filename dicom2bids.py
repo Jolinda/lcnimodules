@@ -46,9 +46,11 @@ class entity_chain:
 		self.datatype = datatype
 		self.suffix = suffix
 		self.chain = chain
+		if not self.chain:
+			self.chain = dict()
 
 	def __repr__(self):
-		return_string = 'datatype: {}, session: {}, chain: {}'.format(datatype, session, chain)
+		return_string = 'datatype: {}, suffix: {}, chain: {}'.format(self.datatype, self.suffix, self.chain)
 		return return_string
 
 
