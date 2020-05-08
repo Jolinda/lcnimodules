@@ -195,9 +195,6 @@ def GenerateCSCommand(subjectdir, bidsdir, bids_dict, json_mod = None, dcm2niix_
 
 	name = GetSubjectName(subjectdir)
 
-#	command = 'module load dcm2niix\n'
-#	command += 'module load jq\n'
-
 	command = ''
 
 	subj_dir = os.path.join(bidsdir, 'sub-{}'.format(name))
@@ -221,7 +218,7 @@ def GenerateCSCommand(subjectdir, bidsdir, bids_dict, json_mod = None, dcm2niix_
 			if not os.path.exists(output_dir):
 				os.makedirs(output_dir)
 
-			command += 'dcm2niix -ba n -l o -o {} -f {} {} {}\n'.format(output_dir,
+			command += 'dcm2niix -ba n -l o -o "{}" -f {} {} "{}"\n'.format(output_dir,
 						format_string, dcm2niix_flags, os.path.join(subjectdir, series))
 
 			json_file = os.path.join(output_dir, format_string + '.json')
