@@ -32,7 +32,7 @@ def GetSubjectName(directory):
 	return re.sub('[^0-9a-zA-Z]+', '', name)
 
 class entity_chain:
-	def __init__(self, datatype, suffix, chain = None, nonstandard = False):
+	def __init__(self, datatype, suffix, nonstandard = False, **chain):
 		
 		if not nonstandard:
 			if datatype not in datatypes:
@@ -45,9 +45,18 @@ class entity_chain:
 		
 		self.datatype = datatype
 		self.suffix = suffix
+
+		## lets folks write chain = {'arg':'value'}
+		## OR arg = 'value', usual **kwargs way
+		if 'chain' in chain:
+			chain = chain['chain']
+
 		self.chain = chain
+
 		if not self.chain:
 			self.chain = dict()
+
+
 
 	def __repr__(self):
 		return_string = 'datatype: {}, suffix: {}, chain: {}'.format(self.datatype, self.suffix, self.chain)
@@ -74,9 +83,15 @@ class bids_dict:
 	def __init__(self):
 		self.dictionary = dict()
 
-	def add(self, series_descripton, datatype, suffix, chain = None, nonstandard = False):
+	def add(self, series_descripton, datatype, suffix, nonstandard = False, **chain):
 
-		self.dictionary[series_descripton] = entity_chain(datatype = datatype, suffix = suffix, chain = chain, nonstandard = nonstandard)
+		## lets folks write chain = {'arg':'value'}
+		## OR arg = 'value', usual **kwargs way
+		if 'chain' in chain:
+			chain = chain['chain']
+
+		self.dictionary[series_descripton] = entity_chain(datatype = datatype, suffix = suffix, 
+			nonstandard = nonstandard, chain = chain)
 		
 	def __str__(self):
 		return_string = str()
