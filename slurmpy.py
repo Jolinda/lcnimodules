@@ -82,8 +82,11 @@ def WrapSlurmCommand(command, jobname =None, index = None,
 				os.mkdir(output_directory)
 			slurm += '--output={}/%x-%j.out '.format(output_directory)
 			slurm += '--error={}/%x-%j.err '.format(output_directory)
+
+	if type(command) is str:
+		command = [command]
 		
-	slurm += '--wrap \"' + command + '"'
+	slurm += '--wrap \"' + '\n'.join(command) + '"'
 	
 	print(slurm)
 	process = subprocess.run(slurm, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -149,10 +152,14 @@ def WriteSlurmFile(jobname, command, filename = None, interpreter = 'bash', inde
 				f.write('%{}'.format(array_limit))
 			f.write('\n\ndata=({})\n\n'.format(' '.join(data_list)))
 			f.write('{}=${{data[$SLURM_ARRAY_TASK_ID]}}\n\n'.format(variable))
-			if '$' + variable not in command:
-				print('Warning: ${} not found in {}. Are you sure about this?'.format(variable, command))
+			#if variable not in command:
+			#	print('Warning: {} not found in {}. Are you sure about this?'.format(variable, command))
 
-		f.write(command + '\n')
+
+		if type(command) is str:
+			command = [command]
+		f.write('\n')
+		f.write('\n'.join(command))
 
 	return filename
 		
@@ -197,13 +204,13 @@ def AllJobs(jobnumber, status):
 
 
 class slurmjob:
-	def __init__(self, jobname = None, index = None, command = None, 
+	def __init__(self, jobname = None, index = None, 
 				email = None,  output_directory = None, dependency = None, deptype = 'ok',
 				data_list = None, array_limit = None, variable = 'x',
 				threads = None, srun_directory = None, filename = None, **slurm_params):
 		
 		self.jobname = jobname
-		self.command = command
+		self.command = list()
 		self.index = index
 		self.email = email
 		self.data_list = data_list
@@ -220,7 +227,7 @@ class slurmjob:
 	def AddSlurmParameters(self, **kwargs):
 		self.slurm_params.update(kwargs)
 		
-	def WriteSlurmFile(self, jobname = None, command = None, filename = None, interpreter = 'bash', 
+	def WriteSlurmFile(self, jobname = None, command = list(), filename = None, interpreter = 'bash', 
 		**kwargs):
 
 		if jobname:
@@ -230,8 +237,8 @@ class slurmjob:
 		
 		if command:
 			self.command = command
-		if not self.command:
-			raise ValueError('command not set')
+		#if not self.command:
+		#	raise ValueError('command not set')
 		
 		if filename:
 			self.filename = filename
@@ -294,5 +301,30 @@ class slurmjob:
 
 	def ShowStatus(self):
 		return ShowStatus(self.jobnumber)
+
+	def ShowOutput(self, index = 0, extension = 'all'):
+		import re
+		files = self.GetOutputFiles()
+		files_to_show = [x for x in files if not re.search('_[^{}]'.format(index), x)]
+		for file in files_to_show:
+			print(file)
+			with open (file) as f:
+				print(f.read())
+
+	def PrintSlurmFile(self):
+		with open (self.filename) as f:
+			print(f.read())
+
+	def NewCommand(self):
+		self.command = list()
+
+	def AppendCommand(self, commandstring):
+		self.command.append(commandstring)
+
+	# doing this because I can't remember datalist vs data_list
+	def ArrayJob(self, data_list):
+		self.data_list = data_list
+
+
 
 		
