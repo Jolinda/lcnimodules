@@ -1,7 +1,4 @@
-# only works if dicom files are sorted into subdirectories by series!
-# You must define the bids_dict & bids_dir for your study
-# Assumes 1 session per subject
-
+import tempfile
 
 # valid datatype information
 datatypes = ['anat', 'func', 'dwi', 'fmap', 'meg', 'eeg', 'ieeg', 'beh']
@@ -193,7 +190,8 @@ def Convert(dicomdir, bidsdir, bids_dict, slurm = True, participant_file = True,
 		if slurm:
 			import slurmpy
 			job = slurmpy.slurmjob(jobname = 'convert', command = command, account = account)
-			job.WriteSlurmFile(filename = '/tmp/convert.srun')
+			filename = tempfile.NamedTemporaryFile().name
+			job.WriteSlurmFile(filename = filename)
 			job.SubmitSlurmFile()
 			if throttle:
 				slurmpy.SlurmThrottle() # Mike's helper script, helps with large # of submissions
@@ -286,8 +284,9 @@ def SortDicoms(input_dir, output_dir, overwrite = False, preview = False, slurm 
 		command += 'dicom2bids.SortDicoms("{}","{}", overwrite = {}, preview = {}, slurm = False)'.format(input_dir, output_dir, overwrite, preview)
 
 		import slurmpy
+		filename = tempfile.NamedTemporaryFile().name
 		job = slurmpy.slurmjob(jobname = 'sort', command = command, account = account)
-		job.WriteSlurmFile(filename = 'sort.srun', interpreter = 'python')
+		job.WriteSlurmFile(filename = filename, interpreter = 'python')
 		return job.SubmitSlurmFile()
 
 	import pydicom, shutil

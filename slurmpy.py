@@ -471,7 +471,7 @@ class slurmjob:
         additional slurm parameters
 
     """
-    def __init__(self, jobname = None, index = None, 
+    def __init__(self, jobname = None, index = None, command = list(),
                 email = None,  output_directory = None, 
                 dependency = None, deptype = 'ok',
                 data_list = None, array_limit = None, variable = 'x',
@@ -479,7 +479,7 @@ class slurmjob:
                 **slurm_params):
         
         self.jobname = jobname
-        self.command = list()
+        self.command = command
         self.index = index
         self.email = email
         self.data_list = data_list
@@ -538,8 +538,8 @@ class slurmjob:
             output_directory = self.output_directory, 
             dependency = self.dependency, deptype = self.deptype,
             threads = self.threads, interpreter = interpreter,
-            array_limit = self.array_limit)
-        #    **self.slurm_params)
+            array_limit = self.array_limit,
+            **self.slurm_params)
 
         return slurmfile
 
