@@ -11,7 +11,7 @@ import time
 import re
 import sys
 
-default_format = ['jobid','jobname','partition','state','elapsed', 
+default_format = ['jobid%15','jobname%30','partition','state','elapsed', 
     'MaxRss']
 """default format for job display in JobInfo
 """
@@ -38,7 +38,7 @@ def SlurmThrottle():
     subprocess.run(['/packages/racs/bin/slurm-throttle'])
 
 def SubmitSlurmFile(filename):
-""" submit a file to slurm using sbatch
+    """ submit a file to slurm using sbatch
 
     Submits a file to slurm using sbatch, and prints the stdout from the
     sbatch command
@@ -51,7 +51,7 @@ def SubmitSlurmFile(filename):
     -------
     jobid if successful
     None if file not found
-"""
+    """
 
     if not os.path.exists(filename):
         print('{} not found'.format(filename))
@@ -435,6 +435,42 @@ def AllJobs(jobid, status):
 
 
 class slurmjob:
+    """ class defining a slurm job
+
+    Attributes
+    ----------
+    jobname, optional
+        name to give job
+    command, optional
+        command to execute
+    filename: str, optional
+        name for script file, will be jobname.srun if not given
+    threads: int or int string, optional
+        number of threads to used, identical to --cpus-per-task
+    email: str, optional
+        email address for --mail-user notification
+    dependency: int or string, optional
+        defer start of job until dependency compltes
+    deptype: str, default = 'ok'
+        only used if dependency is set
+        how the parent job must end. may be ok, any, burstbuffer,
+        notok, corr. See sbatch documentation for more info.
+    output_directory: path string, optional
+        directory to write {jobname}.out/{jobname}.err files to
+        directory will be created if it doesn't exist
+    index: str, optional
+        UO index for charges, will be written to comment field
+    data_list: list, optional
+        array to use for job array
+    variable: string, default = 'x'
+        variable to use for array substitution in command
+    array-limit: int
+        maximum number of concurrently running tasks
+        NOT CURRENTLY IMPLEMENTED
+    **slurm_params: dict
+        additional slurm parameters
+
+    """
     def __init__(self, jobname = None, index = None, 
                 email = None,  output_directory = None, 
                 dependency = None, deptype = 'ok',
@@ -458,32 +494,52 @@ class slurmjob:
         self.slurm_params = slurm_params
 
     def AddSlurmParameters(self, **kwargs):
+        """add slurm parameter to class
+
+        Example
+        -------
+        sj = slurmpy.SlurmJob()
+        sj.AddSlurmParameter(account = 'lcni', mem = '16G')
+        sj.AddSlurmParameter(**{'comment':'test', 'tasks-per-cpu': 1})
+
+        """
         self.slurm_params.update(kwargs)
         
-    def WriteSlurmFile(self, jobname = None, command = list(), filename = None, interpreter = 'bash', 
-        **kwargs):
+    def WriteSlurmFile(self, filename = None, interpreter = 'bash'):
 
-        if jobname:
-            self.jobname = jobname      
+        """Write a script to be submitted to slurm using sbatch
+
+        Parameters
+        ----------
+        filename: str, optional
+            name for script file, will be jobname.srun if not given
+        interpreter: str, optional
+            path to interpreter
+            if 'bash' (default), will use /bin/bash
+
+        Returns
+        -------
+        filename of slurm script
+
+"""
         if not self.jobname:
             raise ValueError('jobname not set')         
-        
-        if command:
-            self.command = command
-        
+             
         if filename:
             self.filename = filename
         else:
             self.filename = '{}.srun'.format(self.jobname)
 
         
-        slurmfile = WriteSlurmFile(jobname = self.jobname, command = self.command, 
-            index = self.index, email = self.email, filename = self.filename,
+        slurmfile = WriteSlurmFile(jobname = self.jobname, 
+            command = self.command, index = self.index, 
+            email = self.email, filename = self.filename,
             data_list = self.data_list, variable = self.variable, 
-            output_directory = self.output_directory, dependency = self.dependency,
+            output_directory = self.output_directory, 
+            dependency = self.dependency, deptype = self.deptype,
             threads = self.threads, interpreter = interpreter,
-            array_limit = self.array_limit, deptype = self.deptype,
-            **{**self.slurm_params, **kwargs})
+            array_limit = self.array_limit)
+        #    **self.slurm_params)
 
         return slurmfile
 
@@ -493,20 +549,22 @@ class slurmjob:
 
 
     ## submit command to slurm using "wrap"
-    def WrapSlurmCommand(self, command=None, **kwargs):
-        if command:
-            self.command = command
+    def WrapSlurmCommand(self):
 
-        self.jobid = WrapSlurmCommand(command = self.command, index = self.index, output_directory = self.output_directory, 
-            dependency = self.dependency, email = self.email, threads = self.threads, deptype = self.deptype,
-            **{**self.slurm_params, **kwargs})
+        self.jobid = WrapSlurmCommand(command = self.command, 
+            index = self.index, 
+            output_directory = self.output_directory, 
+            dependency = self.dependency, email = self.email, 
+            threads = self.threads, deptype = self.deptype,
+            **self.slurm_params)
 
         return self.jobid
     
 
     def GetOutputFiles(self, extension = 'all'):
         if self.output_directory :
-            filename = os.path.join(self.output_directory, '{}-{}'.format(self.jobname, self.jobid))
+            filename = os.path.join(self.output_directory, 
+                '{}-{}'.format(self.jobname, self.jobid))
         else:
             filename = 'slurm-{}'.format(self.jobid)
         if extension == 'all':
@@ -520,7 +578,8 @@ class slurmjob:
             email = self.email
         if not email:
             raise ValueError('no email to notify!')
-        return Notify(jobid = self.jobid, email = email, account = self.account)
+        return Notify(jobid = self.jobid, email = email, 
+            account = self.account)
     
     def JobStatus(self):
         return JobStatus(self.jobid)
