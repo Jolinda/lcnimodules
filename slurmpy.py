@@ -11,7 +11,7 @@ import time
 import re
 import sys
 
-default_format = ['jobid%15','jobname%30','partition','state','elapsed', 
+default_format = ['jobid%20','jobname%25','partition','state','elapsed', 
     'MaxRss']
 """default format for job display in JobInfo
 """
@@ -604,11 +604,7 @@ class SlurmJob:
         with open (self.filename) as f:
             print(f.read())
 
-    def NewCommand(self):
-        self.command = list()
 
-    def AppendCommand(self, commandstring):
-        self.command.append(commandstring)
 
 
 
