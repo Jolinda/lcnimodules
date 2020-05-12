@@ -201,7 +201,7 @@ def WrapSlurmCommand(command, jobname = None, index = None,
 
 def WriteSlurmFile(jobname, command, filename = None, 
                    interpreter = 'bash', index = None,  
-                   data_list = None, variable = 'x', 
+                   array = None, variable = 'x', 
                    output_directory = None, dependency = None,
                    threads = None, array_limit = None, deptype = 'ok', 
                    email = None, **slurm_params):
@@ -234,7 +234,7 @@ def WriteSlurmFile(jobname, command, filename = None,
         directory will be created if it doesn't exist
     index: str, optional
         UO index for charges, will be written to comment field
-    data_list: list, optional
+    array: list, optional
         array to use for job array
     variable: string, default = 'x'
         variable to use for array substitution in command
@@ -265,7 +265,7 @@ def WriteSlurmFile(jobname, command, filename = None,
                         ['module load fsl', 'fslinfo ${x}'],
                         filename = 'fslinfo_array.srun'
                         jobname = 'fslinfo',
-                        data_list = ['file1', 'file2', 'file3'],
+                        array = ['file1', 'file2', 'file3'],
                         account = 'lcni')
     fslinfo_array.srun
 
@@ -314,18 +314,18 @@ def WriteSlurmFile(jobname, command, filename = None,
         if output_directory:
             if not os.path.exists(output_directory):
                 os.mkdir(output_directory)
-            if data_list:
+            if array:
                 f.write('#SBATCH --output={}/%x-%A_%a.out\n'.format(output_directory))
                 f.write('#SBATCH --error={}/%x-%A_%a.err\n\n'.format(output_directory))           
             else:
                 f.write('#SBATCH --output={}/%x-%j.out\n'.format(output_directory))
                 f.write('#SBATCH --error={}/%x-%j.err\n\n'.format(output_directory))
 
-        if data_list:
-            f.write('#SBATCH --array=0-{}'.format(len(data_list) - 1))
+        if array:
+            f.write('#SBATCH --array=0-{}'.format(len(array) - 1))
             if array_limit:
                 f.write('%{}'.format(array_limit))
-            f.write('\n\ndata=({})\n\n'.format(' '.join(data_list)))
+            f.write('\n\ndata=({})\n\n'.format(' '.join(array)))
             f.write('{}=${{data[$SLURM_ARRAY_TASK_ID]}}\n\n'.format(variable))
             #if variable not in command:
             #   print('Warning: {} not found in {}. Are you sure about this?'.format(variable, command))
@@ -434,7 +434,7 @@ def AllJobs(jobid, status):
         return status in statuses
 
 
-class slurmjob:
+class SlurmJob:
     """ class defining a slurm job
 
     Attributes
@@ -460,7 +460,7 @@ class slurmjob:
         directory will be created if it doesn't exist
     index: str, optional
         UO index for charges, will be written to comment field
-    data_list: list, optional
+    array: list, optional
         array to use for job array
     variable: string, default = 'x'
         variable to use for array substitution in command
@@ -474,15 +474,14 @@ class slurmjob:
     def __init__(self, jobname = None, index = None, command = list(),
                 email = None,  output_directory = None, 
                 dependency = None, deptype = 'ok',
-                data_list = None, array_limit = None, variable = 'x',
-                threads = None, srun_directory = None, filename = None, 
-                **slurm_params):
+                array = None, array_limit = None, variable = 'x',
+                threads = None, **slurm_params):
         
         self.jobname = jobname
         self.command = command
         self.index = index
         self.email = email
-        self.data_list = data_list
+        self.array = array
         self.variable = variable
         self.output_directory = output_directory
         self.dependency = dependency
@@ -534,7 +533,7 @@ class slurmjob:
         slurmfile = WriteSlurmFile(jobname = self.jobname, 
             command = self.command, index = self.index, 
             email = self.email, filename = self.filename,
-            data_list = self.data_list, variable = self.variable, 
+            array = self.array, variable = self.variable, 
             output_directory = self.output_directory, 
             dependency = self.dependency, deptype = self.deptype,
             threads = self.threads, interpreter = interpreter,
@@ -611,9 +610,7 @@ class slurmjob:
     def AppendCommand(self, commandstring):
         self.command.append(commandstring)
 
-    # doing this because I can't remember datalist vs data_list
-    def ArrayJob(self, data_list):
-        self.data_list = data_list
+
 
 
 

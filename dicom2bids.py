@@ -189,7 +189,7 @@ def Convert(dicomdir, bidsdir, bids_dict, slurm = True, participant_file = True,
 
 		if slurm:
 			import slurmpy
-			job = slurmpy.slurmjob(jobname = 'convert', command = command, account = account)
+			job = slurmpy.SlurmJob(jobname = 'convert', command = command, account = account)
 			filename = tempfile.NamedTemporaryFile().name
 			job.WriteSlurmFile(filename = filename)
 			job.SubmitSlurmFile()
@@ -285,7 +285,7 @@ def SortDicoms(input_dir, output_dir, overwrite = False, preview = False, slurm 
 
 		import slurmpy
 		filename = tempfile.NamedTemporaryFile().name
-		job = slurmpy.slurmjob(jobname = 'sort', command = command, account = account)
+		job = slurmpy.SlurmJob(jobname = 'sort', command = command, account = account)
 		job.WriteSlurmFile(filename = filename, interpreter = 'python')
 		return job.SubmitSlurmFile()
 
