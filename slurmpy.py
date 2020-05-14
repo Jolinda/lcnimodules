@@ -16,6 +16,8 @@ default_format = ['jobid%20','jobname%25','partition','state','elapsed',
 """default format for job display in JobInfo
 """
 
+slurm_parameters = []
+
 def OnTalapas():
     """are we currently on talapas?
     """
@@ -104,7 +106,7 @@ def WaitUntilComplete(jobid):
 def WrapSlurmCommand(command, jobname = None, index = None, 
                      output_directory = None, dependency = None, 
                      email = None, threads = None, deptype = 'ok', 
-                     **kwargs):
+                     **slurm_params):
 
     """submit command to slurm using sbatch --wrap
 
@@ -157,7 +159,7 @@ def WrapSlurmCommand(command, jobname = None, index = None,
     
     """ 
     # remove 'private' vars
-    slurm_params = {kwargs[k] for k in kwargs if not k.startswith('_')}
+    #slurm_params = {kwargs[k] for k in kwargs if not k.startswith('_')}
 
     slurm = 'sbatch '
 
@@ -207,7 +209,7 @@ def WriteSlurmFile(jobname, command, filename = None,
                    array = None, variable = 'x', 
                    output_directory = None, dependency = None,
                    threads = None, array_limit = None, deptype = 'ok', 
-                   email = None, **kwargs):
+                   email = None, **slurm_params):
     
     """Write a script to be submitted to slurm using sbatch
 
@@ -282,7 +284,7 @@ def WriteSlurmFile(jobname, command, filename = None,
     parameters containing dashes                  
     
     """
-    slurm_params = {kwargs[k] for k in kwargs if not k.startswith('_')}
+ #   slurm_params = {kwargs[k] for k in kwargs if not k.startswith('_')}
 
     if not filename:
         filename = jobname + '.srun'
@@ -441,43 +443,9 @@ def AllJobs(jobid, status):
 class SlurmJob:
     """ class defining a slurm job
 
-    Attributes
-    ----------
-    jobname, optional
-        name to give job
-    command, optional
-        command to execute
-    filename: str, optional
-        name for script file, will be jobname.srun if not given
-    threads: int or int string, optional
-        number of threads to used, identical to --cpus-per-task
-    email: str, optional
-        email address for --mail-user notification
-    dependency: int or string, optional
-        defer start of job until dependency compltes
-    deptype: str, default = 'ok'
-        only used if dependency is set
-        how the parent job must end. may be ok, any, burstbuffer,
-        notok, corr. See sbatch documentation for more info.
-    output_directory: path string, optional
-        directory to write {jobname}.out/{jobname}.err files to
-        directory will be created if it doesn't exist
-    index: str, optional
-        UO index for charges, will be written to comment field
-    array: list, optional
-        array to use for job array
-    variable: string, default = 'x'
-        variable to use for array substitution in command
-    array-limit: int
-        maximum number of concurrently running tasks
-        NOT CURRENTLY IMPLEMENTED
-    **slurm_params: dict
-        additional slurm parameters
-
     """
-    def __init__(self, output_directory = None, **kwargs):
+    def __init__(self, **kwargs):
 
-        self.output_directory = output_directory
         for key in kwargs:
             setattr(self, key, kwargs[key])
 
@@ -498,7 +466,7 @@ class SlurmJob:
         filename of slurm script
 
 """
-        if not self.jobname:
+        if not hasattr(self, 'jobname'):
             raise ValueError('jobname not set')         
              
         if filename:
@@ -506,30 +474,40 @@ class SlurmJob:
         else:
             self.filename = '{}.srun'.format(self.jobname)
 
-        
-        slurmfile = WriteSlurmFile(**vars(self))
+        params = {k:vars(self)[k] for k in vars(self) if not k.startswith('_')}
+        slurmfile = WriteSlurmFile(**params)
 
         return slurmfile
 
     def SubmitSlurmFile(self):
-        self.__jobid = SubmitSlurmFile(self.filename)         
-        return self.__jobid
+        self._jobid = SubmitSlurmFile(self.filename)         
+        return self._jobid
 
 
     ## submit command to slurm using "wrap"
     def WrapSlurmCommand(self):
 
-        self.__jobid = WrapSlurmCommand(**vars(self))
+        params = {k:vars(self)[k] for k in vars(self) if not k.startswith('_')}
+        self._jobid = WrapSlurmCommand(**params)
 
-        return self.__jobid
+        return self._jobid
     
 
     def GetOutputFiles(self, extension = 'all'):
-        if self.output_directory :
+     #   if not hasattr(self, '_jobid'):
+     #       return list()
+
+        if hasattr(self, 'filename'):
+            with open(self.filename) as f:
+                print([l for l in f.readlines() if 'output' in l])
+
+        return
+
+        if hasattr(self, 'output_directory') and self.output_directory :
             filename = os.path.join(self.output_directory, 
-                '{}-{}'.format(self.jobname, self.__jobid))
+                '{}-{}'.format(self.jobname, self._jobid))
         else:
-            filename = 'slurm-{}'.format(self.__jobid)
+            filename = 'slurm-{}'.format(self._jobid)
         if extension == 'all':
             return sorted(glob.glob(filename + '*.*'))
         else:
@@ -541,19 +519,19 @@ class SlurmJob:
             email = self.email
         if not email:
             raise ValueError('no email to notify!')
-        return Notify(jobid = self.__jobid, email = email, 
+        return Notify(jobid = self._jobid, email = email, 
             account = self.account)
     
     def JobStatus(self):
-        return JobStatus(self.__jobid)
+        return JobStatus(self._jobid)
 
 
     def JobInfo(self, format_list = default_format, noheader = None):
-        return JobInfo(self.__jobid, format_list, noheader)
+        return JobInfo(self._jobid, format_list, noheader)
 
 
     def ShowStatus(self):
-        return ShowStatus(self.__jobid)
+        return ShowStatus(self._jobid)
 
     def ShowOutput(self, index = 0, extension = 'all'):
 
