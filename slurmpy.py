@@ -443,6 +443,55 @@ def AllJobs(jobid, status):
 class SlurmJob:
     """ class defining a slurm job
 
+    Parameters
+    ----------
+    jobname: str
+        name to give job
+    command: str or list[str]
+        command or list of commands to run
+    filename: str
+        name for script file, will be jobname.srun if not given
+    interpreter: str
+        path to interpreter
+        if 'bash' (default), will use /bin/bash
+    threads: int or int string
+        number of threads to used, identical to --cpus-per-task
+    email: str
+        email address for --mail-user notification
+    dependency: int or string
+        defer start of job until dependency compltes
+    deptype: str, default = 'ok'
+        only used if dependency is set
+        how the parent job must end. may be ok, any, burstbuffer,
+        notok, corr. See sbatch documentation for more info.
+    output_directory: path string
+        directory to write {jobname}.out/{jobname}.err files to
+        directory will be created if it doesn't exist
+    index: str
+        UO index for charges, will be written to comment field
+    array: list
+        array to use for job array
+    variable: string, default = 'x'
+        variable to use for array substitution in command
+    array-limit: int
+        maximum number of concurrently running tasks
+        NOT CURRENTLY IMPLEMENTED
+    Any other parameters will be treated as SBATCH arguments
+
+    Examples
+    --------
+    sj = SlurmJob(jobname = 'example', account = 'pirg')
+    sj.command = 'echo hello'
+    sj.WrapSlurmCommand()
+
+    sj = SlurmJob()
+    sj.time = 5
+    sj.command = ['echo ${x}', 'srun script.sh ${x}']
+    sj.array = ['file1', 'file2']
+    sj.WriteSlurmFile('example2.srun')
+    sj.SubmitSlurmFile()
+
+
     """
     def __init__(self, **kwargs):
 
@@ -465,6 +514,10 @@ class SlurmJob:
         -------
         filename of slurm script
 
+        Raises
+        ------
+        ValueError if jobname not set
+
 """
         if not hasattr(self, 'jobname'):
             raise ValueError('jobname not set')         
@@ -480,12 +533,25 @@ class SlurmJob:
         return slurmfile
 
     def SubmitSlurmFile(self):
+        """Submit script to job manager
+
+        Returns
+        -------
+        jobid of spawned job
+
+        """
         self._jobid = SubmitSlurmFile(self.filename)         
         return self._jobid
 
 
-    ## submit command to slurm using "wrap"
+
     def WrapSlurmCommand(self):
+        """Submit command to slurm using "wrap"
+
+        Returns
+        -------
+        jobid of spawned job
+        """
 
         params = {k:vars(self)[k] for k in vars(self) if not k.startswith('_')}
         self._jobid = WrapSlurmCommand(**params)
@@ -493,15 +559,26 @@ class SlurmJob:
         return self._jobid
     
 
+    # I considered reading the slurm script file to get this, but there
+    # just isn't a totally clean satisfying way to do it that looks any
+    # better than this way. Just know that this might not work if you 
+    # supply a real output file name without a jobid field.
+    # In that case you really don't need this.
     def GetOutputFiles(self, extension = 'all'):
-     #   if not hasattr(self, '_jobid'):
-     #       return list()
+        """Get a list of the output files slurm wrote to
 
-        if hasattr(self, 'filename'):
-            with open(self.filename) as f:
-                print([l for l in f.readlines() if 'output' in l])
+        Parameters
+        ----------
+        extension: str, default = 'all'
+            If all, return all output files. Otherwise only
+            return files ending in .extension. 
 
-        return
+        Returns
+        -------
+        list of output files
+        """
+        if not hasattr(self, '_jobid'):
+            return list()
 
         if hasattr(self, 'output_directory') and self.output_directory :
             filename = os.path.join(self.output_directory, 
@@ -515,25 +592,58 @@ class SlurmJob:
 
 
     def Notify(self, email = None):
+        """ send a notification when job finishes
+
+            You don't need to do this if you defined the email
+            parameter before the job was submitted.
+
+            Parameters
+            ----------
+            email: str, optional
+                email address to notify
+                default None (try self.email)
+
+            Raises
+            ------
+            AttributeError if email=None and self.email
+            not defined
+
+
+        """
         if not email:
             email = self.email
-        if not email:
-            raise ValueError('no email to notify!')
         return Notify(jobid = self._jobid, email = email, 
             account = self.account)
     
     def JobStatus(self):
+        """return status of job
+        """
         return JobStatus(self._jobid)
 
 
     def JobInfo(self, format_list = default_format, noheader = None):
+        """Return printable information about job
+        """
         return JobInfo(self._jobid, format_list, noheader)
 
 
     def ShowStatus(self):
+        """print summarized status of job
+        """
         return ShowStatus(self._jobid)
 
     def ShowOutput(self, index = 0, extension = 'all'):
+        """print contents of output files
+
+        Parameters
+        ----------
+        index: int, optional, default = 0
+            index of job step to print
+        extension: str, optional, default = 'all'
+            If all, print all output files. Otherwise only
+            print files ending in .extension.
+
+        """
 
         files = self.GetOutputFiles()
         files_to_show = [x for x in files if not re.search('_[^{}]'.format(index), x)]
@@ -543,6 +653,8 @@ class SlurmJob:
                 print(f.read())
 
     def PrintSlurmFile(self):
+        """print the slurm script
+        """
         with open (self.filename) as f:
             print(f.read())
 
