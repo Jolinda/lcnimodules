@@ -11,19 +11,61 @@ import tempfile
 import subprocess
 import os
 
+# todo: add aspect handling for non-square pixels (dti too)
+# fix redundancies in quickview functions
+# generalize view for data that isn't axial to start with
+# change view to axis for quickviewdata
 
-def QuickView(image, plot_array = (1,1), cmap = 'gray', volno = 0, view = 'axial', mag = 1, crop = 0, 
+def QuickView(niftipath, plot_array = (1,1), cmap = 'gray', volno = 0, view = 'axial', mag = 1, crop = 0, 
     outfile = None):
 
-    if type(image) is str: #assume it's a nifti file
-        img = nib.load(image)
-        if len(img.shape) > 3:
-            data = img.dataobj[:,:,:,volno]
-        else:
-            data = img.dataobj
-
+    img = nib.load(str(niftipath))
+    if len(img.shape) > 3:
+        data = img.dataobj[:,:,:,volno]
     else:
-        data = image # hope it's a numpy array or image proxy
+        data = img.dataobj
+    zooms = img.header.get_zooms()
+
+    axis = 2
+    if view.lower().startswith('c'):
+        axis = 1
+    elif view.lower().startswith('s'):
+        axis = 0
+
+    data = np.moveaxis(data, axis, 2 - len(data.shape)) # send slice axis to the back (-1 for greyscale, -2 for rgb)
+    zooms = np.roll(zooms, 2 - axis)
+    aspect = zooms[1]/zooms[0]
+
+    i = 1
+    nrows = plot_array[0]
+    ncols = plot_array[1]
+    dpi = 72
+    stampsize = np.array(data.shape)*mag/dpi
+    plt.figure(figsize=(stampsize[0]* ncols, stampsize[1]*nrows), dpi = dpi)
+
+    nslices = nrows * ncols
+
+    step = int(data.shape[axis]*(100-crop)/(100*(nslices+1)))
+    start = step + int(0.5*data.shape[axis]*crop/100)
+    slices_to_plot = range(start, data.shape[2] + 1 - step, step)
+
+
+    for i,z in enumerate(slices_to_plot[:nslices]):
+        plt.subplot(nrows, ncols, i+1)
+        plt.axis('off')
+        plt.imshow(np.rot90(data.take(indices = z, axis = 2)), cmap=cmap, aspect = aspect)
+
+    plt.tight_layout()
+    if outfile:
+        plt.savefig(outfile, bbox_inches = 'tight')
+    plt.show()
+
+
+
+def QuickViewData(data, plot_array = (1,1), cmap = 'gray', volno = 0, view = 'axial', mag = 1, crop = 0, 
+    outfile = None, aspect = 'auto'):
+
+    data = image # hope it's a numpy array or image proxy
 
     axis = 2
     if view.lower().startswith('c'):
@@ -132,7 +174,7 @@ def dtiView(fa_file, v1_file, plot_array = (1,1), view = 'axial', mag = 1, crop 
     v1 = nib.load(v1_file)
     fa = nib.load(fa_file)
     fa_v1 = np.clip(fa.get_data(), 0, 1)[..., None]*np.abs(v1.get_data())
-    QuickView(fa_v1, plot_array = plot_array, view = view, mag = mag, crop = crop, cmap = None, outfile = outfile)
+    QuickViewData(fa_v1, plot_array = plot_array, view = view, mag = mag, crop = crop, cmap = None, outfile = outfile)
 
 # loop through multiple volumes in parallel
 # Should be able to replace loop with this
