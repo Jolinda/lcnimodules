@@ -649,7 +649,7 @@ class SlurmJob:
         files_to_show = [x for x in files if not re.search('_[^{}]'.format(index), x)]
         for file in files_to_show:
             print(file)
-            with open (file) as f:
+            with open (file, encoding = 'utf-8') as f:
                 print(f.read())
 
     def PrintSlurmFile(self):
