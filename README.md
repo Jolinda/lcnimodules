@@ -1,7 +1,7 @@
 # lcnimodules
 Useful python modules for the LCNI user base
 
-slurmpy: submit jobs to slurm on the talapas data cluster. 
+slurmpy: submit jobs using slurm on the talapas data cluster. 
 
 dicom2bids: convert dicom to bids; calls dcm2niix
 
