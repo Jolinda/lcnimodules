@@ -1,5 +1,5 @@
 # lcnimodules
-Useful python modules for the LCNI user base (others may also find them useful)
+Useful python modules for the LCNI user base
 
 slurmpy: submit jobs to slurm on the talapas data cluster. 
 
