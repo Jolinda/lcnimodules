@@ -11,30 +11,37 @@ import tempfile
 import subprocess
 import os
 
-# todo: add aspect handling for non-square pixels (dti too)
-# fix redundancies in quickview functions
-# generalize view for data that isn't axial to start with
-# change view to axis for quickviewdata
+# todo: add overlays
+#   something like this:
+#       data = np.ma.masked_where(niftifile.get_fdata() == 0, niftifile.get_fdata())
+# there's a lot of redundancies still, either pull those out
+# or consolidate viewers and use args instead
+# need to test with rgb data
+# decide where to put default cmap
 
-def QuickView(niftipath, plot_array = (1,1), cmap = 'gray', volno = 0, view = 'axial', mag = 1, crop = 0, 
-    outfile = None):
+def SliceView(data3d, plot_axis, view_axis, slice_number, **kwargs):
+    """
+    Parameters
+    ----------
+    data3d: numpy array
+    plot_axis: matplotlib axis
+    view_axis: int
+    slice_number: int
+    """
+    plot_axis.imshow(np.rot90(data3d.take(indices=slice_number, axis=view_axis)), **kwargs)
+    plot_axis.axis('off')
+
+def QuickView(niftipath, plot_array = (1,1), volno = 0, view_axis = 2, mag = 1, crop = 0,
+    outfile = None, cmap = 'gray', overlay = None, **kwargs):
 
     img = nib.load(str(niftipath))
     if len(img.shape) > 3:
         data = img.dataobj[:,:,:,volno]
     else:
         data = img.dataobj
-    zooms = img.header.get_zooms()
 
-    axis = 2
-    if view.lower().startswith('c'):
-        axis = 1
-    elif view.lower().startswith('s'):
-        axis = 0
-
-    data = np.moveaxis(data, axis, 2 - len(data.shape)) # send slice axis to the back (-1 for greyscale, -2 for rgb)
-    zooms = np.roll(zooms, 2 - axis)
-    aspect = zooms[1]/zooms[0]
+    zooms = np.delete(img.header.get_zooms()[0:3], view_axis)
+    aspect = zooms[1] / zooms[0]
 
     i = 1
     nrows = plot_array[0]
@@ -45,87 +52,69 @@ def QuickView(niftipath, plot_array = (1,1), cmap = 'gray', volno = 0, view = 'a
 
     nslices = nrows * ncols
 
-    step = int(data.shape[axis]*(100-crop)/(100*(nslices+1)))
-    start = step + int(0.5*data.shape[axis]*crop/100)
-    slices_to_plot = range(start, data.shape[2] + 1 - step, step)
-
+    step = int(data.shape[view_axis]*(100-crop)/(100*(nslices+1)))
+    start = step + int(0.5*data.shape[view_axis]*crop/100)
+    slices_to_plot = range(start, data.shape[view_axis] + 1 - step, step)
 
     for i,z in enumerate(slices_to_plot[:nslices]):
-        plt.subplot(nrows, ncols, i+1)
-        plt.axis('off')
-        plt.imshow(np.rot90(data.take(indices = z, axis = 2)), cmap=cmap, aspect = aspect)
+        axis = plt.subplot(nrows, ncols, i+1)
+        SliceView(data, plot_axis = axis, slice_number = z,
+                  view_axis = view_axis, aspect = aspect, cmap = cmap, **kwargs)
 
     plt.tight_layout()
     if outfile:
         plt.savefig(outfile, bbox_inches = 'tight')
     plt.show()
 
+def Orthoview(niftipath, slices=[0,0,0], volno = 0, overlay = None, **kwargs):
 
+    img = nib.load(str(niftipath))
+    if len(img.shape) > 3:
+        data = img.dataobj[:,:,:,volno]
+    else:
+        data = img.dataobj
 
-def QuickViewData(data, plot_array = (1,1), cmap = 'gray', volno = 0, view = 'axial', mag = 1, crop = 0, 
-    outfile = None, aspect = 'auto'):
+    slice_indices = slices + np.array(img.shape[:3]) // 2
 
-    data = image # hope it's a numpy array or image proxy
+    aspect = []
+    for view in range(0,3):
+        zooms = np.delete(img.header.get_zooms()[0:3], view)
+        aspect.append(zooms[1] / zooms[0])
 
-    axis = 2
-    if view.lower().startswith('c'):
-        axis = 1
-    elif view.lower().startswith('s'):
-        axis = 0
+    fig, axes = plt.subplots(1, 3, figsize=(30, 10))
 
-    data = np.moveaxis(data, axis, 2 - len(data.shape)) # send slice axis to the back (-1 for greyscale, -2 for rgb)
+    for i, ax in enumerate(axes):
+        SliceView(data, plot_axis= ax, slice_number=slice_indices[i],
+                  view_axis=i, aspect=aspect[i], **kwargs)
 
-
-    i = 1
-    nrows = plot_array[0]
-    ncols = plot_array[1]
-    dpi = 72
-    stampsize = np.array(data.shape)*mag/dpi
-    plt.figure(figsize=(stampsize[0]* ncols, stampsize[1]*nrows), dpi = dpi)
-
-    nslices = nrows * ncols
-
-    step = int(data.shape[axis]*(100-crop)/(100*(nslices+1)))
-    start = step + int(0.5*data.shape[axis]*crop/100)
-    slices_to_plot = range(start, data.shape[2] + 1 - step, step)
-
-
-    for i,z in enumerate(slices_to_plot[:nslices]):
-        plt.subplot(nrows, ncols, i+1)
-        plt.axis('off')
-        plt.imshow(np.rot90(data.take(indices = z, axis = 2)), cmap=cmap)
-
-    if outfile:
-        plt.savefig(outfile, bbox_inches = 'tight')
     plt.show()
 
-def ViewByIndices(niifile, indices, ncols, cmap = 'gray', view = 'a', mag = 1, sliceno = None):
+# honestly don't remember why I wanted this
+# the indices are VOLUME indices
+def ViewByIndices(niftipath, indices, ncols = None, sliceno = None,
+                  cmap = 'gray', view_axis = 2, mag = 1, **kwargs):
 
-    print(niifile)
-    img = nib.load(niifile)
-
-    axis = 2
-    if view.lower().startswith('c'):
-        axis = 1
-    elif view.lower().startswith('s'):
-        axis = 0
-
-    data = np.moveaxis(img.dataobj, axis, -1) # send slice axis to the back
+    img = nib.load(str(niftipath))
+    data = img.dataobj
 
     if not sliceno:
-        sliceno = int(data.shape[-1]/2)
+        sliceno = int(data.shape[view_axis]/2)
+
+    if not ncols:
+        ncols = len(indices)
     nrows = math.ceil(len(indices)/ncols)
 
     dpi = 72
     stampsize = np.array(data.shape)*mag/dpi
     plt.figure(figsize=(stampsize[0]* ncols, stampsize[1]*nrows), dpi = dpi)
 
-
     for i,v in enumerate(indices):
-        plt.subplot(nrows, ncols, i+1)
-        plt.axis('off')
-        plt.imshow(np.rot90(data[...,v,sliceno]), cmap=cmap)
+        ax = plt.subplot(nrows, ncols, i+1)
+        SliceView(data[...,v], plot_axis=ax, slice_number=sliceno,
+                  view_axis=view_axis, **kwargs)
     plt.show()
+
+## EVERYTHING BELOW THIS NEEDS FIXING STILL
 
 # loop through like a movie
 def Loop(image, cmap = 'gray', sliceno = None, view = 'a', outfile = None):   
