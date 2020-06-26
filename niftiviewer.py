@@ -116,29 +116,14 @@ def ViewByIndices(niftipath, indices, ncols = None, sliceno = None,
 
 ## EVERYTHING BELOW THIS NEEDS FIXING STILL
 
-# loop through like a movie
-def Loop(image, cmap = 'gray', sliceno = None, view = 'a', outfile = None):   
+# loop through like a movie DOES NOT WORK RIGHT NOW
+def Loop(niftipath, sliceno = None, view_axis = 2, outfile = None):
 
-    if type(image) is str: #assume it's a nifti file
-        img = nib.load(image)
-        data = img.dataobj
+    img = nib.load(str(niftipath))
+    data = img.dataobj
 
-    else:
-        data = image # hope it's a numpy array or image proxy
-
-    axis = 2
-    if view.lower().startswith('c'):
-        axis = 1
-    elif view.lower().startswith('s'):
-        axis = 0
-
-    data = np.moveaxis(data, axis, -1) # send slice axis to the back
-
-    if len(data.shape) > 3:
-        if not sliceno:
-            sliceno = int(data.shape[-1]/2)
-        data = data[...,sliceno]
-
+    if not sliceno:
+        sliceno = int(data.shape[view_axis]/2)
 
     if outfile:
         tmpdir = tempfile.TemporaryDirectory()
@@ -146,8 +131,8 @@ def Loop(image, cmap = 'gray', sliceno = None, view = 'a', outfile = None):
     plt.figure()
 
     for v in range(0,data.shape[-1]):
-        plt.axis('off')
-        plt.imshow(np.rot90(data[...,v]), cmap=cmap)
+        SliceView(data[..., v], plot_axis=plt.gca(), slice_number=sliceno,
+                  view_axis=view_axis, cmap = 'gray')
         if outfile:
             plt.savefig(os.path.join(tmpdir.name, 'temp_{:03d}.png'.format(v)), bbox_inches = 'tight')
         plt.show()
