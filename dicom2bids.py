@@ -29,7 +29,7 @@ def GetSubjectName(directory):
 	return re.sub('[^0-9a-zA-Z]+', '', name)
 
 class entity_chain:
-	def __init__(self, datatype, suffix, nonstandard = False, **chain):
+	def __init__(self, datatype, suffix, nonstandard = False, **kwargs):
 		
 		if not nonstandard:
 			if datatype not in datatypes:
@@ -43,20 +43,24 @@ class entity_chain:
 		self.datatype = datatype
 		self.suffix = suffix
 
-		## lets folks write chain = {'arg':'value'}
-		## OR arg = 'value', usual **kwargs way
-		if 'chain' in chain:
-			chain = chain['chain']
-
-		self.chain = chain
+		## lets folks explicitly write entities = {'arg':'value'}
+		## and/or arg = 'value', usual **kwargs way
+		self.chain = kwargs
+		if 'entities' in kwargs:
+			del(self.chain['entities'])
+			self.chain.update(kwargs['entities'])
+		
 
 		if not self.chain:
 			self.chain = dict()
 
+		self.chain['run'] = '{}'
+
+
 
 
 	def __repr__(self):
-		return_string = 'datatype: {}, suffix: {}, chain: {}'.format(self.datatype, self.suffix, self.chain)
+		return_string = 'datatype: {}, suffix: {}, entities: {}'.format(self.datatype, self.suffix, self.chain)
 		return return_string
 
 
@@ -80,15 +84,16 @@ class bids_dict:
 	def __init__(self):
 		self.dictionary = dict()
 
-	def add(self, series_descripton, datatype, suffix, nonstandard = False, **chain):
+	def add(self, series_descripton, datatype, suffix, nonstandard = False, **kwargs):
 
-		## lets folks write chain = {'arg':'value'}
-		## OR arg = 'value', usual **kwargs way
-		if 'chain' in chain:
-			chain = chain['chain']
+		# seems awkward
+		chain = dict(kwargs)
+		if 'entities' in kwargs:
+			del(chain['entities'])
+			chain.update(kwargs['entities'])
 
 		self.dictionary[series_descripton] = entity_chain(datatype = datatype, suffix = suffix, 
-			nonstandard = nonstandard, chain = chain)
+			nonstandard = nonstandard, **chain)
 		
 	def __str__(self):
 		return_string = str()
@@ -110,7 +115,7 @@ def WriteDescription(subjectdir, bidsdir):
 		projectname = os.path.basename(os.path.dirname(subjectdir))
 		j = {'Name':projectname, 'BIDSVersion':'1.3.0'}
 		j['Authors'] =  GetAuthors(subjectdir)
-		j['Acknowledgements'] = 'BIDS conversion was performed using dcm2niix. Thanks to Jolinda Smith at LCNI at the University of Oregon for additional scripting of BIDS conversion.'
+		j['Acknowledgements'] = 'BIDS conversion was performed using dcm2niix and dicom2bids.'
 		j['ReferencesAndLinks'] = ['Li X, Morgan PS, Ashburner J, Smith J, Rorden C (2016) The first step for neuroimaging data analysis: DICOM to NIfTI conversion. J Neurosci Methods. 264:47-56. doi: 10.1016/j.jneumeth.2016.03.001.']
 		with open(description_file, 'w') as f:
 			json.dump(j, f)
@@ -163,7 +168,7 @@ def AppendParticipant(subjectdir, bidsdir):
 			'sex':ds.PatientSex, 'age':int(ds.PatientAge[:-1])})
 	return
 
-def Convert(dicomdir, bidsdir, bids_dict, slurm = True, participant_file = True, 
+def Convert(dicomdir, bidsdir, bids_dict, slurm = False, participant_file = True, description_file = True,
 	json_mod = None, dcm2niix_flags = '', throttle = False, account = None):
 
 	subjectdirs = [x[0] for x in os.walk(dicomdir) if subject_pattern.match(os.path.basename(x[0].strip('/')))]
@@ -174,7 +179,8 @@ def Convert(dicomdir, bidsdir, bids_dict, slurm = True, participant_file = True,
 	if not os.path.exists(bidsdir):
 		os.makedirs(bidsdir)
 
-	WriteDescription(subjectdirs[0], bidsdir)
+	if description_file:
+		WriteDescription(subjectdirs[0], bidsdir)
 
 	command_base = 'module load dcm2niix\n'
 	command_base += 'module load jq\n'
@@ -277,7 +283,7 @@ def FixJson(filename, key, value):
 lcni_corrections = {'InstitutionName':'University of Oregon', 'InstitutionalDepartmentName':'LCNI', 'InstitutionAddress':'Franklin_Blvd_1440_Eugene_Oregon_US_97403'}
 
 
-def SortDicoms(input_dir, output_dir, overwrite = False, preview = False, slurm = True, account = None):
+def SortDicoms(input_dir, output_dir, overwrite = False, preview = False, slurm = False, account = None):
 
 	if slurm:
 		command = 'import dicom2bids\n'

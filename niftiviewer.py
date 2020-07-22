@@ -28,7 +28,9 @@ def SliceView(data3d, plot_axis, view_axis, slice_number, **kwargs):
     view_axis: int
     slice_number: int
     """
-    plot_axis.imshow(np.rot90(data3d.take(indices=slice_number, axis=view_axis)), **kwargs)
+    # thought I'd tested this and it worked? not working with pineapple_vibe.nii
+ #   plot_axis.imshow(np.rot90(data3d.take(indices=slice_number, axis=view_axis)), **kwargs)
+    plot_axis.imshow(np.rot90(np.array(data3d).take(indices=slice_number, axis=view_axis)), **kwargs)
     plot_axis.axis('off')
 
 def QuickView(niftipath, plot_array = (1,1), volno = 0, view_axis = 2, mag = 1, crop = 0,
