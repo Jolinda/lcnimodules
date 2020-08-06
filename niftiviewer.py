@@ -11,15 +11,12 @@ import tempfile
 import subprocess
 import os
 
-# todo: add overlays
-#   something like this:
-#       data = np.ma.masked_where(niftifile.get_fdata() == 0, niftifile.get_fdata())
-# there's a lot of redundancies still, either pull those out
-# or consolidate viewers and use args instead
+# todo: 
 # need to test with rgb data
-# decide where to put default cmap
+# add overlay cmap parameter
 
-def SliceView(data3d, plot_axis, view_axis, slice_number, **kwargs):
+def SliceView(data3d, plot_axis, view_axis, slice_number, 
+    transparent = False, **kwargs):
     """
     Parameters
     ----------
@@ -30,17 +27,36 @@ def SliceView(data3d, plot_axis, view_axis, slice_number, **kwargs):
     """
     # thought I'd tested this and it worked? not working with pineapple_vibe.nii
  #   plot_axis.imshow(np.rot90(data3d.take(indices=slice_number, axis=view_axis)), **kwargs)
-    plot_axis.imshow(np.rot90(np.array(data3d).take(indices=slice_number, axis=view_axis)), **kwargs)
+    plot_data = np.array(data3d).take(indices=slice_number, axis=view_axis)
+    if transparent:
+        plot_data = np.ma.masked_where(plot_data == 0, plot_data)
+
+    plot_axis.imshow(np.rot90(plot_data), **kwargs)
     plot_axis.axis('off')
 
-def QuickView(niftipath, plot_array = (1,1), volno = 0, view_axis = 2, mag = 1, crop = 0,
-    outfile = None, cmap = 'gray', overlay = None, **kwargs):
+
+# how to do overlays?
+def QuickView(niftipath, plot_array = [1,1], volno = 0, view_axis = 2, mag = 1, 
+    crop = 0, slices = None, outfile = None, cmap = 'gray', overlay = None, 
+    **kwargs):
+
+    if slices and plot_array[0]*plot_array[1] != len(slices):
+        plot_array[0] = 1
+        plot_array[1] = len(slices)
 
     img = nib.load(str(niftipath))
     if len(img.shape) > 3:
         data = img.dataobj[:,:,:,volno]
     else:
         data = img.dataobj
+
+    # todo: check if dimensions are consistent
+    if overlay:
+        overlay_img = nib.load(str(overlay))
+        if len(img.shape) > 3:
+            overlay_data = overlay_img.dataobj[:,:,:,volno]
+        else:
+            overlay_data = overlay_img.dataobj
 
     zooms = np.delete(img.header.get_zooms()[0:3], view_axis)
     aspect = zooms[1] / zooms[0]
@@ -54,27 +70,41 @@ def QuickView(niftipath, plot_array = (1,1), volno = 0, view_axis = 2, mag = 1, 
 
     nslices = nrows * ncols
 
-    step = int(data.shape[view_axis]*(100-crop)/(100*(nslices+1)))
-    start = step + int(0.5*data.shape[view_axis]*crop/100)
-    slices_to_plot = range(start, data.shape[view_axis] + 1 - step, step)
+    if not slices:
+        step = int(data.shape[view_axis]*(100-crop)/(100*(nslices+1)))
+        start = step + int(0.5*data.shape[view_axis]*crop/100)
+        slices = range(start, data.shape[view_axis] + 1 - step, step)
 
-    for i,z in enumerate(slices_to_plot[:nslices]):
+
+
+    for i,z in enumerate(slices[:nslices]):
         axis = plt.subplot(nrows, ncols, i+1)
         SliceView(data, plot_axis = axis, slice_number = z,
                   view_axis = view_axis, aspect = aspect, cmap = cmap, **kwargs)
+        if overlay:
+            SliceView(overlay_data, plot_axis = axis, slice_number = z,
+                      view_axis = view_axis, aspect = aspect, transparent = True,
+                      **kwargs)
 
     plt.tight_layout()
     if outfile:
         plt.savefig(outfile, bbox_inches = 'tight')
     plt.show()
 
-def Orthoview(niftipath, slices=[0,0,0], volno = 0, overlay = None, **kwargs):
+def Orthoview(niftipath, slices=[0,0,0], volno = 0, overlay = None, cmap = 'gray', **kwargs):
 
     img = nib.load(str(niftipath))
     if len(img.shape) > 3:
         data = img.dataobj[:,:,:,volno]
     else:
         data = img.dataobj
+
+    if overlay:
+        overlay_img = nib.load(str(overlay))
+        if len(img.shape) > 3:
+            overlay_data = overlay_img.dataobj[:,:,:,volno]
+        else:
+            overlay_data = overlay_img.dataobj
 
     slice_indices = slices + np.array(img.shape[:3]) // 2
 
@@ -87,7 +117,10 @@ def Orthoview(niftipath, slices=[0,0,0], volno = 0, overlay = None, **kwargs):
 
     for i, ax in enumerate(axes):
         SliceView(data, plot_axis= ax, slice_number=slice_indices[i],
-                  view_axis=i, aspect=aspect[i], **kwargs)
+                  view_axis=i, aspect=aspect[i], cmap = cmap, **kwargs)
+        if overlay:
+            SliceView(overlay_data, plot_axis= ax, slice_number=slice_indices[i],
+                  view_axis=i, aspect=aspect[i], transparent = True, **kwargs)
 
     plt.show()
 
@@ -112,7 +145,7 @@ def ViewByIndices(niftipath, indices, ncols = None, sliceno = None,
 
     for i,v in enumerate(indices):
         ax = plt.subplot(nrows, ncols, i+1)
-        SliceView(data[...,v], plot_axis=ax, slice_number=sliceno,
+        SliceView(data[...,v], plot_axis=ax, slice_number=sliceno, cmap = cmap,
                   view_axis=view_axis, **kwargs)
     plt.show()
 
