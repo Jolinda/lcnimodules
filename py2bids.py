@@ -259,6 +259,9 @@ def GenerateCSCommand(subjectdir, bidsdir, bids_dict, json_mod = None, dcm2niix_
 				for key in json_mod:
 					command += FixJson(json_file, key, json_mod[key])
 
+			if echain.datatype == 'dwi':
+				command += FixDwiFiles(output_dir)
+
 
 
 	return command
@@ -286,6 +289,13 @@ def GetAuthors(dicompath):
 def FixJson(filename, key, value):
 	command =  'jq \'.{1}="{2}"\' {0} > /tmp/{3}\n'.format(filename, key, value, os.path.basename(filename))
 	command += 'mv /tmp/{} {}\n'.format(os.path.basename(filename), filename)
+	return(command)
+
+# returns the command string to rename bval and bvecs files
+def FixDwiFiles(dirname):
+	command = 'for x in {}/*dwi.bv*\n'.format(dirname)
+	command += 'do mv $x ${x//dwi.}\n'
+	command += 'done\n'
 	return(command)
 
 # usual things wrong in lcni dicoms pre 4/30/2020
