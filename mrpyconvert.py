@@ -126,7 +126,7 @@ def WriteDescription(subjectdir, bidsdir):
 		projectname = os.path.basename(os.path.dirname(subjectdir))
 		j = {'Name':projectname, 'BIDSVersion':'1.3.0'}
 		j['Authors'] =  GetAuthors(subjectdir)
-		j['Acknowledgements'] = 'BIDS conversion was performed using dcm2niix and py2bids.'
+		j['Acknowledgements'] = 'BIDS conversion was performed using dcm2niix and mrpyconvert.'
 		j['ReferencesAndLinks'] = ['Li X, Morgan PS, Ashburner J, Smith J, Rorden C (2016) The first step for neuroimaging data analysis: DICOM to NIfTI conversion. J Neurosci Methods. 264:47-56. doi: 10.1016/j.jneumeth.2016.03.001.']
 		with open(description_file, 'w') as f:
 			json.dump(j, f)
